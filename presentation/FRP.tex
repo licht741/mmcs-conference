@@ -1,0 +1,178 @@
+\documentclass[10pt,pdf,hyperref={unicode},aspectratio=169]{beamer}
+
+\usepackage [T2A] {fontenc}
+\usepackage [utf8] {inputenc}
+\usepackage [english,russian] {babel}
+\usepackage {textcase}
+\usepackage {listings} 
+\usepackage {alltt}
+%\usetheme   {Berlin}
+\usetheme   {Warsaw}
+ 
+\begin{document}
+
+\title{Реализация FRP библиотеки на языке Erlang}  
+
+\institute{Институт математики, механики и компьютерных наук им. И.И. Воровича \\
+    \vspace{0.3cm}
+    Кафедра информатики и вычислительного эксперимента  \\
+    Научный руководитель:  Брагилевский В. Н.\\
+    \vspace{0.3cm}
+}
+
+\author{Нежевский Н.М.}
+
+\date{9 апреля 2015}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}
+\frametitle{Введение}
+\framesubtitle{Функциональное реактивное программирование}
+\begin{itemize}
+\item Потоки данных
+\item Событийность
+\item Преобразование данных
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Введение}
+\framesubtitle{Функциональное реактивное программирование}
+\onslide<1->
+
+\begin{columns}
+\column{0.45\textwidth}
+ \begin{block}{Обычный подход}
+ \begin{alltt}
+  a = 1; b = a + 1;
+  \textcolor{cyan}{// a = 1, b = 2}
+  a = 2;
+  \textcolor{cyan}{// a = 2, b = 2}
+ \end{alltt}
+ \end{block}
+
+\column{0.45\textwidth}
+ \begin{block}{Реактивный подход}
+ \begin{alltt}
+  a = 1; b = a + 1;
+  \textcolor{cyan}{// a = 1, b = 2}
+  a = 2;
+  \textcolor{cyan}{// a = 2, b = 3}
+ \end{alltt}
+ \end{block}
+\end{columns}
+
+\onslide<2->
+ \begin{block}{Функциональный реактивный подход}
+  \begin{center}
+   g(f(z(x)))
+  \end{center}
+ \end{block}
+\end{frame}
+
+\begin{frame}
+ \frametitle{Принципы реализации}
+ \framesubtitle{Общие принципы реализации}
+ \begin{itemize}
+  \item Структура
+  
+  \item События
+  
+  \item Логика  
+
+  \item Распространение изменений
+  
+ \end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+
+ \frametitle{Пример: обработка данных}
+ \framesubtitle{Узлы}
+\begin{block}{Создание и описание узлов}
+\fontsize{8pt}{8pt}\selectfont
+\begin{alltt}
+
+\textcolor{cyan}{%% node() :: pid() | fun()}
+ \{ok, \textcolor{magenta}{Entry}\} = frp_api:start_node(),
+
+ \{ok, \textcolor{magenta}{RecG}\}  = frp_api:start_node(\textcolor{blue}{fun}(\textcolor{magenta}{State}, \textcolor{magenta}{_Value}) -> 
+                                      main:receive_new_data(\textcolor{magenta}{State}, \textcolor{magenta}{_Value}) 
+                                  \textcolor{blue}{end}, \{{\textcolor{green}{"NASDAQ"}, \textcolor{green}{"GOOG"}}\}),
+                                  
+ \{ok, \textcolor{magenta}{HandG}\} = frp_api:start_node(\textcolor{blue}{fun}(\textcolor{magenta}{State}, \textcolor{magenta}{_Value}) -> 
+                                      main:handle_new_data(\textcolor{magenta}{State}, \textcolor{magenta}{Value}) 
+                                  \textcolor{blue}{end}),                                  
+                                  
+ \{ok, \textcolor{magenta}{SendDB}\} = frp_api:start_node(\textcolor{blue}{fun}(\textcolor{magenta}{State}, \textcolor{magenta}{_Value}) -> 
+                                      receiver:send_to_db(\textcolor{magenta}{State}, \textcolor{magenta}{Value}) 
+                                   \textcolor{blue}{end}),                                                                    
+\end{alltt}
+
+\end{block} 
+
+\end{frame}
+
+\begin{frame}[fragile]
+
+ \frametitle{Пример: обработка данных}
+ \framesubtitle{Сеть}
+\begin{block}{Создание сети}
+\fontsize{8pt}{8pt}\selectfont
+\begin{alltt}
+\textcolor{cyan}{%% network() :: digraph()}
+\textcolor{cyan}{%% vertex()  :: unique_id() | node()}
+
+\textcolor{magenta}{Network} = frp_api:create_network(),
+\textcolor{magenta}{Nodes} = [\{entry, \textcolor{magenta}{Entry}\}, \{receiver, \textcolor{magenta}{RecG}\}, \{handler, \textcolor{magenta}{HandG}\}, \{dbsender, \textcolor{magenta}{SendDB}\}],
+frp_api:add_nodes(\textcolor{magenta}{Network}, \textcolor{magenta}{Nodes}),
+\end{alltt}
+
+\end{block} 
+
+\begin{block}{Установление зависимостей}
+\fontsize{7pt}{7pt}\selectfont
+\begin{alltt}
+frp_api:add_listener(\textcolor{magenta}{Network}, entry, receiver),
+frp_api:add_listener(\textcolor{magenta}{Network}, receiver, handler),
+frp_api:add_listener(\textcolor{magenta}{Network}, handler, dbsender),
+\end{alltt}
+
+\end{block} 
+
+\end{frame}
+
+\begin{frame}[fragile]
+ \frametitle{Пример: обработка данных}
+ \framesubtitle{События}
+
+\begin{block}{Однократное событие}
+\fontsize{8pt}{8pt}\selectfont
+\begin{alltt}
+frp_api:event(\{\textcolor{magenta}{Network}, \textcolor{magenta}{entry}\}, get_new_data),
+\end{alltt}
+\end{block}
+
+\begin{block}{Периодическое событие}
+\fontsize{8pt}{8pt}\selectfont
+\begin{alltt}
+frp_api:timer(\{{\textcolor{magenta}{Network}, \textcolor{magenta}{entry}}\}, get_new_data, \textcolor{green}{15000}),
+\end{alltt}
+\end{block}
+\end{frame}
+
+\begin{frame}
+\frametitle{Краткие выводы:}
+\begin{itemize}
+\item Использование модели акторов
+\item Callback функции определяют правила преобразования данных 
+\item События и их обработку задаёт пользователь
+\item Изменение логики без изменения структуры
+\end{itemize}
+\end{frame}
+
+
+\end{document}
